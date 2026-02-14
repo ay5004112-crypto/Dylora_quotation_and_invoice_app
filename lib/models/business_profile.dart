@@ -9,6 +9,10 @@ class BusinessProfile {
   final String accountNumber;
   final String ifsc;
   final String bankName;
+  final String? logoPath;
+  final String? qrPath;
+  final String? stampPath;
+  final String? signaturePath;
 
   BusinessProfile({
     required this.name,
@@ -20,5 +24,9 @@ class BusinessProfile {
     required this.accountNumber,
     required this.ifsc,
     required this.bankName,
+    this.logoPath,
+    this.qrPath,
+    this.stampPath,
+    this.signaturePath,
   });
 }

@@ -1,131 +1,146 @@
 import 'package:flutter/material.dart';
-import 'package:quotation_invoice/models/business_profile.dart';
-import 'package:quotation_invoice/client_list.dart';
-// Ensure this import exists to recognize the Client type
-import 'client_model.dart'; 
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+import 'package:quotation_invoice/pdf_service.dart';
+import '../models/business_profile.dart';
+import '../models/invoice_item.dart';
 
 class InvoicePage extends StatefulWidget {
   final BusinessProfile business;
-
-  const InvoicePage({
-    super.key,
-    required this.business,
-  });
+  const InvoicePage({super.key, required this.business});
 
   @override
   State<InvoicePage> createState() => _InvoicePageState();
 }
 
 class _InvoicePageState extends State<InvoicePage> {
-  final TextEditingController clientNameController = TextEditingController();
-  final TextEditingController amountController = TextEditingController();
-  final TextEditingController descriptionController = TextEditingController();
+  final Color primaryColor = const Color(0xff6366f1);
+  final Color slate800 = const Color(0xff1e293b);
+
+  late String invoiceNumber;
+  String currentDate = DateFormat('dd-MM-yyyy').format(DateTime.now());
+  List<InvoiceItem> items = [InvoiceItem(name: "", quantity: 1, price: 0)];
+  double gstPercentage = 18.0;
+  bool isIgst = false;
+
+  final termsController = TextEditingController(text: "1. Goods once sold will not be taken back.");
+  final notesController = TextEditingController();
 
   @override
-  void dispose() {
-    clientNameController.dispose();
-    amountController.dispose();
-    descriptionController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    invoiceNumber = "INV-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}";
   }
 
-  void _selectClient() async {
-    final selected = await Navigator.push(
-      context, 
-      MaterialPageRoute(builder: (_) => const ClientListPage()),
-    );
-
-    // FIXED: Added type check to allow access to .name
-    if (selected != null && selected is Client) {
-      setState(() {
-        clientNameController.text = selected.name;
-      });
-    }
-  }
+  double get subtotal => items.fold(0, (sum, item) => sum + item.total);
+  double get taxAmount => subtotal * (gstPercentage / 100);
+  double get totalPayable => subtotal + taxAmount;
 
   @override
   Widget build(BuildContext context) {
-    final business = widget.business; 
-
     return Scaffold(
+      backgroundColor: const Color(0xfff8fafc),
       appBar: AppBar(
-        title: const Text("Create Invoice"),
+        title: const Text("Generate Invoice", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: primaryColor,
+        elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              "Business Details",
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const Divider(),
-            Text("Company: ${business.name}", style: const TextStyle(fontSize: 16)),
-            Text("Phone: ${business.phone}"),
-            if (business.email.isNotEmpty) Text("Email: ${business.email}"),
-            if (business.gst.isNotEmpty) Text("GST: ${business.gst}"),
-
-            const SizedBox(height: 30),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          SingleChildScrollView(
+            padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 120),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Client Details",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                // NEW: Button to select from saved clients
-                TextButton.icon(
-                  onPressed: _selectClient,
-                  icon: const Icon(Icons.person_add),
-                  label: const Text("Select Saved"),
-                ),
+                _buildHeaderCard(),
+                const SizedBox(height: 24),
+                _buildItemSection(),
+                const SizedBox(height: 24),
+                _buildTaxSettings(),
+                const SizedBox(height: 16),
+                TextField(controller: termsController, decoration: const InputDecoration(labelText: "Terms", filled: true, fillColor: Colors.white)),
               ],
             ),
-            const Divider(),
-            TextField(
-              controller: clientNameController,
-              decoration: const InputDecoration(
-                labelText: "Client/Company Name",
-                border: OutlineInputBorder(),
+          ),
+          _buildBottomActionPanel(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(widget.business.name.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: primaryColor)),
+          Text("GSTIN: ${widget.business.gst}", style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+          const Divider(),
+          Text("Invoice No: $invoiceNumber", style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildItemSection() {
+    return Column(
+      children: [
+        ...items.asMap().entries.map((entry) {
+          int index = entry.key;
+          return Card(
+            child: ListTile(
+              title: TextField(
+                decoration: const InputDecoration(hintText: "Item Name", border: InputBorder.none),
+                onChanged: (v) => items[index].name = v,
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: descriptionController,
-              decoration: const InputDecoration(
-                labelText: "Description",
-                border: OutlineInputBorder(),
+              subtitle: Row(
+                children: [
+                  Expanded(child: TextField(decoration: const InputDecoration(labelText: "Qty"), keyboardType: TextInputType.number, onChanged: (v) => setState(() => items[index].quantity = int.tryParse(v) ?? 1))),
+                  const SizedBox(width: 10),
+                  Expanded(child: TextField(decoration: const InputDecoration(labelText: "Price"), keyboardType: TextInputType.number, onChanged: (v) => setState(() => items[index].price = double.tryParse(v) ?? 0))),
+                ],
               ),
+              trailing: IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () => setState(() => items.removeAt(index))),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: "Amount",
-                prefixText: "₹ ",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 30),
+          );
+        }),
+        TextButton.icon(onPressed: () => setState(() => items.add(InvoiceItem(name: ""))), icon: const Icon(Icons.add), label: const Text("Add Item")),
+      ],
+    );
+  }
+
+  Widget _buildTaxSettings() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: slate800, borderRadius: BorderRadius.circular(12)),
+      child: Column(children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text("IGST", style: TextStyle(color: Colors.white)), Switch(value: isIgst, onChanged: (v) => setState(() => isIgst = v))]),
+        TextField(style: const TextStyle(color: Colors.white), decoration: const InputDecoration(labelText: "GST Rate %", labelStyle: TextStyle(color: Colors.white)), keyboardType: TextInputType.number, onChanged: (v) => setState(() => gstPercentage = double.tryParse(v) ?? 0)),
+      ]),
+    );
+  }
+
+  Widget _buildBottomActionPanel() {
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: Container(
+        height: 90,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)]),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Total"), Text("₹${totalPayable.toStringAsFixed(2)}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
-              ),
-              onPressed: () {
-                if (clientNameController.text.isEmpty || amountController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Please fill required fields")),
-                  );
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Invoice Generated Successfully")),
-                );
+              style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+              onPressed: () async {
+                final pdf = await PdfService.generateInvoice(business: widget.business, items: items, invoiceNum: invoiceNumber, date: currentDate, gstRate: gstPercentage, isIgst: isIgst, terms: termsController.text);
+                await Printing.layoutPdf(onLayout: (f) => pdf.save());
               },
-              child: const Text("Generate Invoice"),
-            )
+              child: const Text("SAVE PDF", style: TextStyle(color: Colors.white)),
+            ),
           ],
         ),
       ),
