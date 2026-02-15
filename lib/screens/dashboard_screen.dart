@@ -35,7 +35,7 @@ class DashboardScreen extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const SideBar(),
+            //const SideBar(),
 
             Expanded(
               child: Padding(
@@ -224,6 +224,7 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
       ),
+      bottomNavigationBar: const BottomNav(),
     );
   }
 }

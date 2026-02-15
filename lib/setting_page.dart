@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+// import your global notifiers
+import '../main.dart'; // or wherever themeNotifier & notificationsEnabled live
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -10,16 +12,48 @@ class SettingsPage extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ListTile(
-            leading: const Icon(Icons.dark_mode_outlined),
-            title: const Text("Dark Mode"),
-            trailing: Switch(value: false, onChanged: (v) {}),
+          // 🌙 Dark Mode
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeNotifier,
+            builder: (context, mode, _) {
+              return ListTile(
+                leading: const Icon(Icons.dark_mode_outlined),
+                title: const Text("Dark Mode"),
+                trailing: Switch(
+                  value: mode == ThemeMode.dark,
+                  onChanged: (v) {
+                    themeNotifier.value =
+                        v ? ThemeMode.dark : ThemeMode.light;
+                  },
+                ),
+              );
+            },
           ),
-          ListTile(
-            leading: const Icon(Icons.notifications_outlined),
-            title: const Text("Notifications"),
-            trailing: Switch(value: true, onChanged: (v) {}),
+
+          // 🔔 Notifications
+          ValueListenableBuilder<bool>(
+            valueListenable: notificationsEnabled,
+            builder: (context, enabled, _) {
+              return ListTile(
+                leading: const Icon(Icons.notifications_outlined),
+                title: const Text("Notifications"),
+                trailing: Switch(
+                  value: enabled,
+                  onChanged: (v) {
+                    notificationsEnabled.value = v;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          v ? "Notifications enabled" : "Notifications disabled",
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
           ),
+
           ListTile(
             leading: const Icon(Icons.lock_outline),
             title: const Text("Change Password"),
@@ -29,6 +63,7 @@ class SettingsPage extends StatelessWidget {
               );
             },
           ),
+
           ListTile(
             leading: const Icon(Icons.info_outline),
             title: const Text("About App"),
